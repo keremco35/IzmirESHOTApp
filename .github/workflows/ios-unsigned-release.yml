@@ -1,13 +1,20 @@
 # iOS Unsigned Release Workflow
-# Builds an unsigned IPA-like archive on tag push and uploads to GitHub Releases.
-# Trigger: Push a tag with format v* (e.g., v1.0.0)
+# Builds an unsigned IPA-like archive on every push and uploads to GitHub Releases.
+# Triggers on: push to main/master, pull requests, and v* tags
 
 name: iOS Unsigned Release
 
 on:
   push:
+    branches:
+      - main
+      - master
     tags:
       - 'v*'
+  pull_request:
+    branches:
+      - main
+      - master
 
 jobs:
   build:
@@ -49,16 +56,21 @@ jobs:
         run: |
           zip -r ESHOT-Tracker-unsigned.ipa Payload
 
-      - name: Get tag name
-        id: get_tag
-        run: echo "TAG_NAME=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+      # Upload as artifact for every build
+      - name: Upload IPA as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ESHOT-Tracker-unsigned
+          path: ESHOT-Tracker-unsigned.ipa
 
+      # Create GitHub Release only on tag push
       - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          name: ESHOT Tracker ${{ steps.get_tag.outputs.TAG_NAME }}
+          name: ESHOT Tracker ${{ github.ref_name }}
           body: |
-            ## ESHOT Tracker ${{ steps.get_tag.outputs.TAG_NAME }}
+            ## ESHOT Tracker ${{ github.ref_name }}
             
             ### Download
             Download the unsigned IPA below.
