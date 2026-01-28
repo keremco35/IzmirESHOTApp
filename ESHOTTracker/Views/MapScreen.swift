@@ -3,10 +3,12 @@ import SwiftUI
 
 struct MapScreen: View {
     @StateObject private var viewModel = BusTrackingViewModel()
+    @State private var showingSearch = true
 
     var body: some View {
         NavigationView {
-            VStack(spacing: 0) {
+            ZStack(alignment: .bottom) {
+                // Full screen map
                 Map(
                     coordinateRegion: $viewModel.region,
                     interactionModes: .all,
@@ -17,97 +19,116 @@ struct MapScreen: View {
                         MapAnnotationView(item: item)
                     }
                 }
-                .frame(height: 320)
+                .ignoresSafeArea(edges: .bottom)
 
-                VStack(spacing: 12) {
-                    Picker("search_mode", selection: $viewModel.searchMode) {
-                        Text("search_line").tag(SearchMode.line)
-                        Text("search_stop").tag(SearchMode.stop)
-                    }
-                    .pickerStyle(.segmented)
-
-                    HStack {
-                        TextField("search_placeholder", text: $viewModel.searchText)
-                            .textInputAutocapitalization(.never)
-                            .disableAutocorrection(true)
-                            .textFieldStyle(.roundedBorder)
-
-                        Button("search_action") {
-                            Task { await viewModel.performSearch() }
+                // Bottom sheet overlay
+                VStack(spacing: 0) {
+                    // Handle bar
+                    Capsule()
+                        .fill(Color.secondary.opacity(0.5))
+                        .frame(width: 40, height: 5)
+                        .padding(.top, 8)
+                        .onTapGesture {
+                            withAnimation { showingSearch.toggle() }
                         }
-                        .buttonStyle(.borderedProminent)
-                    }
-                }
-                .padding()
 
-                List {
-                    if viewModel.isOffline {
-                        Text("offline_cache")
+                    if showingSearch {
+                        // Search controls
+                        VStack(spacing: 12) {
+                            Picker("search_mode", selection: $viewModel.searchMode) {
+                                Text("search_line").tag(SearchMode.line)
+                                Text("search_stop").tag(SearchMode.stop)
+                            }
+                            .pickerStyle(.segmented)
+
+                            HStack {
+                                TextField("search_placeholder", text: $viewModel.searchText)
+                                    .textInputAutocapitalization(.never)
+                                    .disableAutocorrection(true)
+                                    .textFieldStyle(.roundedBorder)
+
+                                Button("search_action") {
+                                    Task { await viewModel.performSearch() }
+                                }
+                                .buttonStyle(.borderedProminent)
+                            }
+                        }
+                        .padding(.horizontal)
+                        .padding(.top, 12)
+
+                        // Status messages
+                        if viewModel.isOffline {
+                            HStack {
+                                Image(systemName: "wifi.slash")
+                                Text("offline_cache")
+                            }
+                            .font(.caption)
                             .foregroundColor(.orange)
-                    }
+                            .padding(.horizontal)
+                        }
 
-                    if let errorMessage = viewModel.errorMessage {
-                        Text(errorMessage)
-                            .foregroundColor(.red)
-                    }
+                        if let errorMessage = viewModel.errorMessage {
+                            Text(errorMessage)
+                                .font(.caption)
+                                .foregroundColor(.red)
+                                .padding(.horizontal)
+                        }
 
-                    if viewModel.isLoading {
-                        ProgressView()
-                    }
+                        if viewModel.isLoading {
+                            ProgressView()
+                                .padding(.top, 8)
+                        }
 
-                    if viewModel.searchMode == .line {
-                        Section(header: Text("lines_title")) {
-                            ForEach(viewModel.lineResults) { line in
-                                Button {
-                                    Task { await viewModel.selectLine(line) }
-                                } label: {
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text(line.displayName)
-                                            .font(.headline)
-                                        if !line.description.isEmpty {
-                                            Text(line.description)
-                                                .font(.subheadline)
-                                                .foregroundColor(.secondary)
+                        // Results list
+                        ScrollView {
+                            LazyVStack(alignment: .leading, spacing: 8) {
+                                // Stops or arrivals
+                                if !viewModel.stopResults.isEmpty {
+                                    ForEach(viewModel.stopResults) { stop in
+                                        StopRow(stop: stop, isSelected: viewModel.selectedStop?.id == stop.id) {
+                                            Task { await viewModel.selectStop(stop) }
                                         }
                                     }
                                 }
-                            }
-                        }
-                    } else {
-                        Section(header: Text("stops_title")) {
-                            ForEach(viewModel.stopResults) { stop in
-                                Button {
-                                    Task { await viewModel.selectStop(stop) }
-                                } label: {
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text(stop.name)
-                                            .font(.headline)
-                                        Text(stop.lines.joined(separator: ", "))
-                                            .font(.subheadline)
-                                            .foregroundColor(.secondary)
+
+                                // Arrivals for selected stop
+                                if let stop = viewModel.selectedStop, !viewModel.arrivals.isEmpty {
+                                    Text(String(format: NSLocalizedString("arrivals_for_stop", comment: ""), stop.name))
+                                        .font(.headline)
+                                        .padding(.top, 12)
+
+                                    ForEach(viewModel.arrivals) { arrival in
+                                        ArrivalRow(arrival: arrival)
                                     }
                                 }
                             }
+                            .padding(.horizontal)
+                            .padding(.vertical, 8)
                         }
-                    }
-
-                    if let stop = viewModel.selectedStop {
-                        Section(header: Text(String(format: NSLocalizedString("arrivals_for_stop", comment: ""), stop.name))) {
-                            if viewModel.arrivals.isEmpty {
-                                Text("no_arrivals")
-                                    .foregroundColor(.secondary)
-                            } else {
-                                ForEach(viewModel.arrivals) { arrival in
-                                    ArrivalRow(arrival: arrival)
-                                }
-                            }
-                        }
+                        .frame(maxHeight: 250)
                     }
                 }
-                .listStyle(.plain)
+                .background(
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(Color(UIColor.systemBackground))
+                        .shadow(radius: 8)
+                )
+                .padding(.horizontal, 8)
+                .padding(.bottom, 8)
             }
             .navigationTitle(Text("app_title"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button {
+                        withAnimation { showingSearch.toggle() }
+                    } label: {
+                        Image(systemName: showingSearch ? "chevron.down" : "magnifyingglass")
+                    }
+                }
+            }
         }
+        .navigationViewStyle(.stack)
         .task { await viewModel.start() }
         .onDisappear { viewModel.stop() }
     }
@@ -117,25 +138,57 @@ private struct MapAnnotationView: View {
     let item: MapAnnotationItem
 
     var body: some View {
-        VStack(spacing: 4) {
+        VStack(spacing: 2) {
             if item.kind == .bus {
                 ZStack {
                     Circle()
                         .fill(Color.blue)
-                        .frame(width: 36, height: 36)
+                        .frame(width: 32, height: 32)
                     Text(item.title)
-                        .font(.caption2)
+                        .font(.system(size: 10, weight: .bold))
                         .foregroundColor(.white)
                 }
             } else {
                 Image(systemName: "mappin.circle.fill")
-                    .font(.title2)
+                    .font(.title)
                     .foregroundColor(.red)
             }
-            Text(item.subtitle)
-                .font(.caption2)
-                .foregroundColor(.secondary)
         }
+    }
+}
+
+private struct StopRow: View {
+    let stop: BusStop
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(stop.name)
+                        .font(.subheadline)
+                        .fontWeight(isSelected ? .bold : .regular)
+                    if !stop.lines.isEmpty {
+                        Text(stop.lines.prefix(5).joined(separator: ", "))
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+                Spacer()
+                if isSelected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(.accentColor)
+                }
+            }
+            .padding(.vertical, 6)
+            .padding(.horizontal, 12)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(isSelected ? Color.accentColor.opacity(0.15) : Color(UIColor.secondarySystemBackground))
+            )
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -144,16 +197,27 @@ private struct ArrivalRow: View {
 
     var body: some View {
         HStack {
-            VStack(alignment: .leading, spacing: 4) {
+            Circle()
+                .fill(Color.green)
+                .frame(width: 8, height: 8)
+            VStack(alignment: .leading, spacing: 2) {
                 Text(arrival.lineNumber)
-                    .font(.headline)
-                Text(arrival.direction)
                     .font(.subheadline)
+                    .fontWeight(.semibold)
+                Text(arrival.direction)
+                    .font(.caption)
                     .foregroundColor(.secondary)
             }
             Spacer()
             Text(arrival.estimatedArrivalText)
                 .font(.headline)
+                .foregroundColor(.accentColor)
         }
+        .padding(.vertical, 6)
+        .padding(.horizontal, 12)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color(UIColor.secondarySystemBackground))
+        )
     }
 }
