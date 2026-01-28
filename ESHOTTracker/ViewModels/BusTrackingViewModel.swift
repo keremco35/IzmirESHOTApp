@@ -1,4 +1,4 @@
-import Foundation
+    import Foundation
 import MapKit
 
 enum SearchMode: String, CaseIterable {
@@ -11,13 +11,36 @@ enum MapAnnotationKind {
     case stop
 }
 
-struct MapAnnotationItem: Identifiable, Hashable {
+struct MapAnnotationItem: Identifiable {
     let id: String
     let coordinate: CLLocationCoordinate2D
     let title: String
     let subtitle: String
     let kind: MapAnnotationKind
 }
+
+extension MapAnnotationItem: Equatable {
+    static func == (lhs: MapAnnotationItem, rhs: MapAnnotationItem) -> Bool {
+        lhs.id == rhs.id &&
+        lhs.coordinate.latitude == rhs.coordinate.latitude &&
+        lhs.coordinate.longitude == rhs.coordinate.longitude &&
+        lhs.title == rhs.title &&
+        lhs.subtitle == rhs.subtitle &&
+        lhs.kind == rhs.kind
+    }
+}
+
+extension MapAnnotationItem: Hashable {
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+        hasher.combine(coordinate.latitude)
+        hasher.combine(coordinate.longitude)
+        hasher.combine(title)
+        hasher.combine(subtitle)
+    }
+}
+
+extension MapAnnotationKind: Equatable {}
 
 @MainActor
 final class BusTrackingViewModel: ObservableObject {

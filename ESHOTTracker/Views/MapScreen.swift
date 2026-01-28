@@ -5,7 +5,7 @@ struct MapScreen: View {
     @StateObject private var viewModel = BusTrackingViewModel()
 
     var body: some View {
-        NavigationStack {
+        NavigationView {
             VStack(spacing: 0) {
                 Map(
                     coordinateRegion: $viewModel.region,
